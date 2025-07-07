@@ -7,7 +7,6 @@ package web
 
 import (
 	"fmt"
-	"github.com/Team254/cheesy-arena/game"
 	"log"
 	"net/http"
 	"path/filepath"
@@ -15,20 +14,89 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/Team254/cheesy-arena/game"
+
 	"github.com/Team254/cheesy-arena/field"
 	"github.com/Team254/cheesy-arena/model"
+
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"math/big"
+	"os"
+	"time"
 )
 
 const (
 	sessionTokenCookie = "session_token"
 	adminUser          = "admin"
-	tlsCertFile        = "certs/https_10-0.100.5_8443.crt"
-    tlsKeyFile         = "certs/https_10-0.100.5_8443-privateKey.key"
+	tlsCertFile        = "certs/cheesyarena.crt"
+	tlsKeyFile         = "certs/cheesyarena.key"
 )
 
 type Web struct {
 	arena           *field.Arena
 	templateHelpers template.FuncMap
+}
+
+// Generates a new self-signed certificate and key for Cheesy Arena.
+// The certificate will be saved as certs/cheesyarena.crt and the key as certs/cheesyarena.key.
+func GenerateSelfSignedCert() error {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return err
+	}
+
+	serialNumber, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	if err != nil {
+		return err
+	}
+
+	template := x509.Certificate{
+		SerialNumber: serialNumber,
+		Subject: pkix.Name{
+			Organization: []string{"Cheesy Arena"},
+		},
+		NotBefore: time.Now(),
+		NotAfter:  time.Now().Add(365 * 24 * time.Hour), // 1 year
+
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+	}
+
+	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
+	if err != nil {
+		return err
+	}
+
+	// Ensure certs directory exists
+	if err := os.MkdirAll("certs", 0700); err != nil {
+		return err
+	}
+
+	certOut, err := os.Create("certs/cheesyarena.crt")
+	if err != nil {
+		return err
+	}
+	defer certOut.Close()
+	if err := pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes}); err != nil {
+		return err
+	}
+
+	keyOut, err := os.Create("certs/cheesyarena.key")
+	if err != nil {
+		return err
+	}
+	defer keyOut.Close()
+	privBytes := x509.MarshalPKCS1PrivateKey(key)
+	if err := pem.Encode(keyOut, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: privBytes}); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func NewWeb(arena *field.Arena) *Web {
@@ -90,6 +158,14 @@ func NewWeb(arena *field.Arena) *Web {
 
 // Starts the webserver and blocks, waiting on requests. Does not return until the application exits.
 func (web *Web) ServeWebInterface(port int) {
+	// Generate a self-signed certificate if it doesn't already exist.
+	if _, err := os.Stat(tlsCertFile); os.IsNotExist(err) {
+		log.Println("Generating self-signed certificate...")
+		if err := GenerateSelfSignedCert(); err != nil {
+			log.Fatalf("Failed to generate self-signed certificate: %v", err)
+		}
+		log.Println("Self-signed certificate generated successfully.")
+	}
 	http.Handle("/static/", http.StripPrefix("/static/", addNoCacheHeader(http.FileServer(http.Dir("static/")))))
 	http.Handle("/", web.newHandler())
 	log.Printf("Serving HTTP requests on port %d", port)
@@ -98,7 +174,7 @@ func (web *Web) ServeWebInterface(port int) {
 	// http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
 	// Start Server TLS
 	http.ListenAndServeTLS(fmt.Sprintf(":%d", port), tlsCertFile, tlsKeyFile, nil)
-	
+
 }
 
 // Serves the root page of Cheesy Arena.
