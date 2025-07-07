@@ -22,6 +22,8 @@ import (
 const (
 	sessionTokenCookie = "session_token"
 	adminUser          = "admin"
+	tlsCertFile        = "certs/certbundle.pem"
+    tlsKeyFile         = "certs/server.key"
 )
 
 type Web struct {
@@ -92,8 +94,11 @@ func (web *Web) ServeWebInterface(port int) {
 	http.Handle("/", web.newHandler())
 	log.Printf("Serving HTTP requests on port %d", port)
 
-	// Start Server
-	http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
+	// Start Server No TLS
+	// http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
+	// Start Server TLS
+	http.ListenAndServeTLS(fmt.Sprintf(":%d", port), tlsCertFile, tlsKeyFile, nil)
+	
 }
 
 // Serves the root page of Cheesy Arena.
