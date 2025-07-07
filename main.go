@@ -14,6 +14,7 @@ import (
 
 const eventDbPath = "./event.db"
 const httpPort = 8080
+const httpsPort = 8443
 
 // Main entry point for the application.
 func main() {
@@ -24,7 +25,8 @@ func main() {
 
 	// Start the web server in a separate goroutine.
 	web := web.NewWeb(arena)
-	go web.ServeWebInterface(httpPort)
+	//go web.ServeWebInterface(httpPort)
+	go web.ServeWebInterface(httpsPort)
 
 	// Run the arena state machine in the main thread.
 	arena.Run()
