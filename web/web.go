@@ -22,8 +22,8 @@ import (
 const (
 	sessionTokenCookie = "session_token"
 	adminUser          = "admin"
-	tlsCertFile        = "certs/certbundle.pem"
-    tlsKeyFile         = "certs/server.key"
+	tlsCertFile        = "certs/https_10-0.100.5_8443.crt"
+    tlsKeyFile         = "certs/https_10-0.100.5_8443-privateKey.key"
 )
 
 type Web struct {
